@@ -1,43 +1,62 @@
+# Beállítom az AWS providert és a használt régiót
 provider "aws" {
   region = "us-east-1"
 }
 
-# ---------------- VPC ----------------
+# Létrehozok egy VPC-t saját IP tartománnyal és DNS támogatással
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_support   = true
   enable_dns_hostnames = true
+
+  tags = {
+    Name = "Terraform VPC"
+  }
 }
 
-# ---------------- SUBNET ----------------
+# Létrehozok egy subnetet a VPC-n belül
 resource "aws_subnet" "subnet" {
   vpc_id                  = aws_vpc.main.id
   cidr_block              = "10.0.1.0/24"
   map_public_ip_on_launch = true
+
+  tags = {
+    Name = "Terraform Subnet"
+  }
 }
 
-# ---------------- IGW ----------------
+# Létrehozok egy internet gateway-t a VPC internet eléréséhez
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "Terraform Internet Gateway"
+  }
 }
 
-# ---------------- ROUTE TABLE ----------------
+# Létrehozok egy route table-t a hálózati útvonalak kezelésére
 resource "aws_route_table" "rt" {
   vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "Terraform Route Table"
+  }
 }
 
+# Hozzáadok a route table-hez egy alapértelmezett útvonalat az internet felé
 resource "aws_route" "internet" {
   route_table_id         = aws_route_table.rt.id
   destination_cidr_block = "0.0.0.0/0"
   gateway_id             = aws_internet_gateway.igw.id
 }
 
+# Összekapcsolom a subnetet a route table-lel
 resource "aws_route_table_association" "assoc" {
   subnet_id      = aws_subnet.subnet.id
   route_table_id = aws_route_table.rt.id
 }
 
-# ---------------- AMI ----------------
+# Lekérem a legfrissebb Amazon Linux 2 AMI-t
 data "aws_ami" "amazon_linux" {
   most_recent = true
   owners      = ["amazon"]
@@ -48,13 +67,17 @@ data "aws_ami" "amazon_linux" {
   }
 }
 
-# ---------------- KEY ----------------
+# Létrehozok egy SSH kulcspárt a példányokhoz való hozzáféréshez
 resource "aws_key_pair" "key" {
   key_name   = "mykey"
   public_key = file("mykey.pub")
+
+  tags = {
+    Name = "Terraform Key Pair"
+  }
 }
 
-# ---------------- SECURITY GROUP WEB ----------------
+# Létrehozok egy security groupot a web szerver számára HTTP, SSH és ICMP eléréssel
 resource "aws_security_group" "web_sg" {
   vpc_id = aws_vpc.main.id
 
@@ -85,9 +108,13 @@ resource "aws_security_group" "web_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = {
+    Name = "Terraform Web Security Group"
+  }
 }
 
-# ---------------- SECURITY GROUP DB ----------------
+# Létrehozok egy security groupot az adatbázis számára, amely csak a web szervertől fogad MySQL kapcsolatot
 resource "aws_security_group" "db_sg" {
   vpc_id = aws_vpc.main.id
 
@@ -111,9 +138,13 @@ resource "aws_security_group" "db_sg" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = {
+    Name = "Terraform Database Security Group"
+  }
 }
 
-# ---------------- DB INSTANCE ----------------
+# Létrehozok egy EC2 példányt adatbázis szerver céljára
 resource "aws_instance" "db" {
   ami           = data.aws_ami.amazon_linux.id
   instance_type = "t2.micro"
@@ -123,9 +154,13 @@ resource "aws_instance" "db" {
   vpc_security_group_ids = [aws_security_group.db_sg.id]
 
   user_data = file("db-init.sh")
+
+  tags = {
+    Name = "Terraform Database Instance"
+  }
 }
 
-# ---------------- WEB INSTANCE ----------------
+# Létrehozok egy EC2 példányt web szerver céljára és átadom a DB privát IP-jét
 resource "aws_instance" "web" {
   ami           = data.aws_ami.amazon_linux.id
   instance_type = "t2.micro"
@@ -137,9 +172,17 @@ resource "aws_instance" "web" {
   user_data = templatefile("web-init.sh", {
     db_host = aws_instance.db.private_ip
   })
+
+  tags = {
+    Name = "Terraform Web Instance"
+  }
 }
 
-# ---------------- ELASTIC IP ----------------
+# Hozzárendelek egy publikus Elastic IP címet a web szerverhez
 resource "aws_eip" "web_ip" {
   instance = aws_instance.web.id
+
+  tags = {
+    Name = "Terraform Web EIP"
+  }
 }
